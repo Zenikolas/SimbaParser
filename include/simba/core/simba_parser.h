@@ -1,6 +1,7 @@
 #pragma once
-#include "market_data.h"
-#include "parsed_message.h"
+#include "assembler.h"
+#include "simba/core/market_data.h"
+#include "simba/core/parsed_message.h"
 
 #include <cstdint>
 #include <functional>
@@ -18,6 +19,7 @@ public:
 
 private:
   MessageCallback callback_;
+  SimbaAssembler assembler_;
 };
 
 } // namespace simba

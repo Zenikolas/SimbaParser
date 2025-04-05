@@ -1,4 +1,4 @@
-add_library(simba_core simba_parser.cpp)
+add_library(simba_core assembler.cpp decoder.cpp simba_parser.cpp)
 
 add_library(simba::core ALIAS simba_core)
 

@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "market_data.h"
+#include "simba/core/market_data.h"
 
 namespace simba {
 
@@ -25,6 +25,8 @@ enum class MessageTemplate : uint16_t {
   OrderBookSnapshot = 17,
 };
 
+#pragma pack(push, 1)
+
 struct MarketDataPacketHeader {
   uint32_t msg_seq_num;
   uint16_t msg_size;
@@ -43,8 +45,6 @@ struct SBEHeader {
   uint16_t schema_id;
   uint16_t version;
 };
-
-#pragma pack(push, 1)
 
 struct OrderUpdate {
   int64_t md_entry_id;
@@ -89,6 +89,11 @@ struct OrderBookSnapshotHeader {
   uint32_t last_msg_seq_num_processed;
   uint32_t rpt_seq;
   uint32_t trading_session_id;
+};
+
+struct RepeatingGroupHeader {
+  uint16_t blockLength;
+  uint8_t  numInGroup;
 };
 #pragma pack(pop)
 

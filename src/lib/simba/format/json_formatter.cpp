@@ -1,9 +1,6 @@
 #include "simba/format/json_formatter.h"
 
 #include <sstream>
-#include <variant>
-
-#include "simba/core/market_data.h"
 
 namespace simba {
 

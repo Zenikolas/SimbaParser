@@ -13,7 +13,7 @@ struct SimbaPayloadView {
   bool valid() const { return data != nullptr && length > 0; }
 };
 
-inline std::optional<SimbaPayloadView>
+std::optional<SimbaPayloadView>
 extract_simba_payload(const uint8_t *packet_data, size_t packet_size);
 
 } // namespace simba

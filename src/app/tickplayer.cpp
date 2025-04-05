@@ -8,6 +8,7 @@
 #include "simba/core/simba_parser.h"
 #include "simba/format/json_formatter.h"
 #include "simba/input/pcap_reader.h"
+#include "simba/net/net_frame_parser.h"
 
 struct CmdOptions {
   std::string pcap_file;
@@ -67,7 +68,15 @@ int main(int argc, char *argv[]) {
       break;
     }
 
-    parser.feed(reinterpret_cast<const uint8_t *>(msg.data()), msg.size());
+    auto payload = simba::extract_simba_payload(
+        reinterpret_cast<const uint8_t *>(msg.data()), msg.size());
+
+    if (!payload || !payload->valid()) {
+      std::cerr << "Invalid SIMBA payload in packet, skipping\n";
+      continue;
+    }
+
+    parser.feed(payload->data, payload->length);
   }
 
   return 0;
