@@ -1,68 +1,74 @@
+#include <filesystem>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <filesystem>
-#include <optional>
 
-#include "pcap_reader.h"
+#include "simba/core/parsed_message.h"
+#include "simba/core/simba_parser.h"
+#include "simba/format/json_formatter.h"
+#include "simba/input/pcap_reader.h"
 
 struct CmdOptions {
-    std::string pcap_file;
+  std::string pcap_file;
 };
 
-std::optional<CmdOptions> parse_args(int argc, char* argv[]) {
-    CmdOptions options;
+std::optional<CmdOptions> parse_args(int argc, char *argv[]) {
+  CmdOptions options;
 
-    for (int i = 1; i < argc; ++i) {
-        std::string_view arg = argv[i];
+  for (int i = 1; i < argc; ++i) {
+    std::string_view arg = argv[i];
 
-        if ((arg == "--file" || arg == "-f") && i + 1 < argc) {
-            options.pcap_file = argv[++i];
-        } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: tickplayer --file <capture.pcap>\n";
-            return std::nullopt;
-        } else {
-            std::cerr << "Unknown argument: " << arg << "\n";
-            return std::nullopt;
-        }
+    if ((arg == "--file" || arg == "-f") && i + 1 < argc) {
+      options.pcap_file = argv[++i];
+    } else if (arg == "--help" || arg == "-h") {
+      std::cout << "Usage: tickplayer --file <capture.pcap>\n";
+      return std::nullopt;
+    } else {
+      std::cerr << "Unknown argument: " << arg << "\n";
+      return std::nullopt;
     }
+  }
 
-    if (options.pcap_file.empty()) {
-        std::cerr << "Error: PCAP file not specified. Use --file <filename>\n";
-        return std::nullopt;
-    }
+  if (options.pcap_file.empty()) {
+    std::cerr << "Error: PCAP file not specified. Use --file <filename>\n";
+    return std::nullopt;
+  }
 
-    return options;
+  return options;
 }
 
+int main(int argc, char *argv[]) {
+  auto parsed = parse_args(argc, argv);
+  if (!parsed) {
+    return 1;
+  }
 
-int main(int argc, char* argv[]) {
-    auto parsed = parse_args(argc, argv);
-    if (!parsed) {
-        return 1;
+  const auto &opts = *parsed;
+  std::cout << "Reading PCAP from: " << opts.pcap_file << "\n";
+
+  simba::Reader reader(opts.pcap_file);
+
+  if (!reader.is_open() || reader.read_global_header()) {
+    return 1;
+  }
+
+  auto processing_cb = [](const simba::ParsedMessage &msg) -> void {
+    std::cout << simba::JsonFormatter::format(msg) << "\n";
+  };
+
+  simba::SimbaParser parser(processing_cb);
+
+  while (true) {
+    simba::PcapPacketHeader header;
+    std::vector<char> msg;
+    if (!reader.read_next_packet(header, msg)) {
+      std::cout << "Reached end of file, exiting\n";
+      break;
     }
 
-    const auto& opts = *parsed;
-    std::cout << "Reading PCAP from: " << opts.pcap_file << "\n";
+    parser.feed(reinterpret_cast<const uint8_t *>(msg.data()), msg.size());
+  }
 
-    pcap::Reader reader(opts.pcap_file);
-
-    if (!reader.is_open() || reader.read_global_header()) {
-        return 1;
-    }
-
-    while (true) {
-        pcap::PcapPacketHeader header;
-        std::vector<char> msg;
-        if (!reader.read_next_packet(header, msg)) {
-            std::cout << "Reached end of file, exiting\n";
-            break;
-        }
-
-        std::cout << header << msg.size() << "\n";
-    }
-
-
-
-    return 0;
+  return 0;
 }

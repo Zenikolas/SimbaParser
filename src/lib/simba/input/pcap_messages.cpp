@@ -1,8 +1,8 @@
-#include "pcap_messages.h"
+#include "simba/input/pcap_messages.h"
 
 #include <iomanip>
 
-namespace pcap {
+namespace simba {
 
 std::ostream &operator<<(std::ostream &os, const PcapPacketHeader &hdr) {
   os << "PcapPacketHeader { "
@@ -13,4 +13,4 @@ std::ostream &operator<<(std::ostream &os, const PcapPacketHeader &hdr) {
   return os;
 }
 
-} // namespace pcap
+} // namespace simba

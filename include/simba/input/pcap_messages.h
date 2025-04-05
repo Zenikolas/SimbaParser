@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <iostream>
 
-namespace pcap {
+namespace simba {
 
 #pragma pack(push, 1)
 
@@ -27,6 +27,6 @@ struct PcapPacketHeader {
 
 #pragma pack(pop)
 
-std::ostream& operator<<(std::ostream& os, const PcapPacketHeader& hdr);
+std::ostream &operator<<(std::ostream &os, const PcapPacketHeader &hdr);
 
-} // namespace pcap
+} // namespace simba
