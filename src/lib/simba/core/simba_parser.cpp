@@ -15,11 +15,16 @@ void SimbaParser::feed(const uint8_t *data, size_t len) {
   }
 
   const auto header = read_struct<MarketDataPacketHeader>(data);
-  const bool is_incremental = (header.msg_flags & 0x08) != 0;
+
   const bool is_last_fragment = (header.msg_flags & 0x01) != 0;
+  const bool is_start_of_snapshot = (header.msg_flags & 0x02) != 0;
+  const bool is_end_of_snapshot = (header.msg_flags & 0x04) != 0;
+  const bool is_incremental = (header.msg_flags & 0x08) != 0;
 
   const uint8_t *payload = data + sizeof(MarketDataPacketHeader);
   size_t payload_len = len - sizeof(MarketDataPacketHeader);
+
+  bool complete = false;
 
   if (is_incremental) {
     if (payload_len < sizeof(IncrementalPacketHeader)) {
@@ -29,12 +34,25 @@ void SimbaParser::feed(const uint8_t *data, size_t len) {
 
     payload += sizeof(IncrementalPacketHeader);
     payload_len -= sizeof(IncrementalPacketHeader);
+
+    assembler_.feed(payload, payload_len);
+
+    complete = is_last_fragment;
+  } else {
+    if (is_start_of_snapshot) {
+      assembler_.clear();
+    }
+
+    assembler_.feed(payload, payload_len);
+
+    if (is_end_of_snapshot) {
+      complete = true;
+    }
   }
 
-  // Assemble fragments (if fragmented)
-  bool complete = assembler_.feed(payload, payload_len, !is_last_fragment);
-  if (!complete)
+  if (!complete) {
     return;
+  }
 
   auto simba_payload = assembler_.get_payload();
   const uint8_t *ptr = simba_payload.data();
