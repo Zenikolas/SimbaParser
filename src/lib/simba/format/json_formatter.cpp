@@ -25,7 +25,7 @@ std::string JsonFormatter::format(const OrderExecution &msg) {
   std::ostringstream oss;
   oss << "{";
   oss << "\"type\":\"OrderExecution\",";
-  oss << "\"mdEntryID\":" << msg.md_entry_id.to_string() << ",";
+  oss << "\"mdEntryID\":" << msg.md_entry_id << ",";
   oss << "\"mdEntryPx\":" << msg.md_entry_px.to_string() << ",";
   oss << "\"mdEntrySize\":" << msg.md_entry_size.to_string() << ",";
   oss << "\"lastPx\":" << msg.last_px.to_double() << ",";

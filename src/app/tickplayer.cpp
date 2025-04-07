@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
 
   simba::Reader reader(opts.pcap_file);
 
-  if (!reader.is_open() || reader.read_global_header()) {
+  if (!reader.is_open() || !reader.read_global_header()) {
     return 1;
   }
 

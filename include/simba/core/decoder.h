@@ -6,5 +6,6 @@
 #include <optional>
 
 namespace simba {
-std::optional<ParsedMessage> decode_message(const uint8_t *data, size_t len);
+std::optional<ParsedMessage> decode_message(uint16_t template_id,
+                                            const uint8_t *data, size_t len);
 } // namespace simba

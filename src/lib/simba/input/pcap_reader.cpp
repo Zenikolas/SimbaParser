@@ -9,8 +9,10 @@ bool Reader::read_global_header() {
     return false;
   }
 
-  // Check magic number for endianness (0xa1b2c3d4 for LE)
-  if (global_header.magic_number != 0xa1b2c3d4) {
+  // Check magic number for endianness (0xa1b2c3d4 for LE and 0xa1b23c4d for LE
+  // with nanoseconds)
+  if (global_header.magic_number != 0xa1b2c3d4 &&
+      global_header.magic_number != 0xa1b23c4d) {
     std::cerr << "Unsupported format or endian mismatch: " << std::hex
               << global_header.magic_number << "\n";
     return false;
@@ -21,7 +23,8 @@ bool Reader::read_global_header() {
   return true;
 }
 
-bool Reader::read_next_packet(PcapPacketHeader &pkt_hdr, std::vector<char> &data) {
+bool Reader::read_next_packet(PcapPacketHeader &pkt_hdr,
+                              std::vector<char> &data) {
   if (!file.read(reinterpret_cast<char *>(&pkt_hdr), sizeof(pkt_hdr))) {
     return false;
   }

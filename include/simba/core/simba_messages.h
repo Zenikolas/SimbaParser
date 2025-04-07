@@ -59,7 +59,7 @@ struct OrderUpdate {
 };
 
 struct OrderExecution {
-  Int64NULL md_entry_id;
+  int64_t md_entry_id;
   Decimal5NULL md_entry_px;
   Int64NULL md_entry_size;
   Decimal5 last_px;
@@ -93,7 +93,7 @@ struct OrderBookSnapshotHeader {
 
 struct RepeatingGroupHeader {
   uint16_t blockLength;
-  uint8_t  numInGroup;
+  uint8_t numInGroup;
 };
 #pragma pack(pop)
 

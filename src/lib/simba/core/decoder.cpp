@@ -8,33 +8,25 @@
 
 namespace simba {
 
-std::optional<ParsedMessage> decode_message(const uint8_t *data, size_t len) {
-  if (len < sizeof(SBEHeader)) {
-    std::cerr << "Message too short for SBE header\n";
-    return std::nullopt;
-  }
-
-  const SBEHeader sbe = read_struct<SBEHeader>(data);
-  const uint8_t *payload = data + sizeof(SBEHeader);
-  size_t remaining = len - sizeof(SBEHeader);
-
-  switch (static_cast<MessageTemplate>(sbe.template_id)) {
+std::optional<ParsedMessage>
+decode_message(uint16_t template_id, const uint8_t *payload, size_t len) {
+  switch (static_cast<MessageTemplate>(template_id)) {
   case MessageTemplate::OrderUpdate:
-    if (remaining < sizeof(OrderUpdate)) {
+    if (len < sizeof(OrderUpdate)) {
       std::cerr << "Incomplete OrderUpdate\n";
       return std::nullopt;
     }
     return ParsedMessage{read_struct<OrderUpdate>(payload)};
 
   case MessageTemplate::OrderExecution:
-    if (remaining < sizeof(OrderExecution)) {
+    if (len < sizeof(OrderExecution)) {
       std::cerr << "Incomplete OrderExecution\n";
       return std::nullopt;
     }
     return ParsedMessage{read_struct<OrderExecution>(payload)};
 
   case MessageTemplate::OrderBookSnapshot: {
-    if (remaining < sizeof(OrderBookSnapshotHeader)) {
+    if (len < sizeof(OrderBookSnapshotHeader)) {
       std::cerr << "Incomplete OrderBookSnapshot header\n";
       return std::nullopt;
     }
@@ -47,7 +39,7 @@ std::optional<ParsedMessage> decode_message(const uint8_t *data, size_t len) {
     snapshot.trading_session_id = header.trading_session_id;
 
     const uint8_t *ptr = payload + sizeof(OrderBookSnapshotHeader);
-    if (ptr + sizeof(RepeatingGroupHeader) > data + len) {
+    if (ptr + sizeof(RepeatingGroupHeader) > payload + len) {
       std::cerr << "Missing repeating group header\n";
       return std::nullopt;
     }
@@ -56,7 +48,7 @@ std::optional<ParsedMessage> decode_message(const uint8_t *data, size_t len) {
     ptr += sizeof(group_header);
 
     for (size_t i = 0; i < group_header.numInGroup; ++i) {
-      if (ptr + group_header.blockLength > data + len) {
+      if (ptr + group_header.blockLength > payload + len) {
         std::cerr << "Entry overflows message\n";
         return std::nullopt;
       }
@@ -68,7 +60,7 @@ std::optional<ParsedMessage> decode_message(const uint8_t *data, size_t len) {
   }
 
   default:
-    std::cerr << "Unknown template ID: " << sbe.template_id << "\n";
+    std::cerr << "Unknown template ID: " << template_id << "\n";
     return std::nullopt;
   }
 }

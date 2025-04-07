@@ -58,23 +58,47 @@ void SimbaParser::feed(const uint8_t *data, size_t len) {
   const uint8_t *ptr = simba_payload.data();
   size_t remaining = simba_payload.size();
 
-  // Loop over SBE messages inside the packet
-  while (remaining >= sizeof(SBEHeader)) {
-    const auto sbe = read_struct<SBEHeader>(ptr);
-    size_t message_len = sizeof(SBEHeader) + sbe.block_length;
-
-    if (remaining < message_len) {
-      std::cerr << "Truncated SBE message\n";
+  if (!is_incremental) {
+    // Snapshot: only one message per packet
+    if (remaining < sizeof(SBEHeader)) {
+      std::cerr << "Truncated snapshot SBE header\n";
       return;
     }
 
-    auto result = decode_message(ptr, message_len);
-    if (result) {
-      callback_(*result);
+    const auto sbe = read_struct<SBEHeader>(ptr);
+    remaining -= sizeof(SBEHeader);
+    ptr += sizeof(SBEHeader);
+
+    if (remaining < sbe.block_length) {
+      std::cerr << "Truncated snapshot body, remaining= " << remaining
+                << " sizeof(SBEHeader)=" << sizeof(SBEHeader)
+                << " sbe.block_length=" << sbe.block_length << "\n";
+      return;
     }
 
-    ptr += message_len;
-    remaining -= message_len;
+    auto result = decode_message(sbe.template_id, ptr, remaining);
+    if (result)
+      callback_(*result);
+    return;
+  }
+
+  // Incremental: multiple messages
+  while (remaining >= sizeof(SBEHeader)) {
+    const auto sbe = read_struct<SBEHeader>(ptr);
+    ptr += sizeof(SBEHeader);
+    remaining -= sizeof(SBEHeader);
+
+    if (sbe.block_length == 0 || remaining < sbe.block_length) {
+      std::cerr << "Truncated incremental message\n";
+      return;
+    }
+
+    auto result = decode_message(sbe.template_id, ptr, sbe.block_length);
+    if (result)
+      callback_(*result);
+
+    ptr += sbe.block_length;
+    remaining -= sbe.block_length;
   }
 }
 
