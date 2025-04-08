@@ -29,13 +29,13 @@ bool Reader::read_next_packet(PcapPacketHeader &pkt_hdr,
     return false;
   }
 
-  if (static_cast<size_t>(file.gcount()) < sizeof(pkt_hdr)) {
+  if (static_cast<size_t>(file.gcount()) < sizeof(pkt_hdr)) [[unlikely]] {
     std::cerr << "Incomplete packet header\n";
     return false;
   }
 
   data.resize(pkt_hdr.incl_len);
-  if (!file.read(data.data(), pkt_hdr.incl_len)) {
+  if (!file.read(data.data(), pkt_hdr.incl_len)) [[unlikely]] {
     std::cerr << "Failed to read packet data\n";
     return false;
   }

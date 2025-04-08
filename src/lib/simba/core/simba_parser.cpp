@@ -18,7 +18,7 @@ template <typename F> struct ScopeGuard {
 SimbaParser::SimbaParser(Callback cb) : callback_(std::move(cb)) {}
 
 void SimbaParser::feed(const uint8_t *data, size_t len) {
-  if (len < sizeof(MarketDataPacketHeader)) {
+  if (len < sizeof(MarketDataPacketHeader)) [[unlikely]] {
     std::cerr << "Packet too short for MarketDataPacketHeader\n";
     return;
   }
@@ -41,14 +41,16 @@ void SimbaParser::feed(const uint8_t *data, size_t len) {
 }
 
 void SimbaParser::handle_stream_transition(bool is_incremental) {
-  if (is_incremental && reassembly_state_ == ReassemblyState::Snapshot) {
+  if (is_incremental && reassembly_state_ == ReassemblyState::Snapshot)
+      [[unlikely]] {
     std::cerr << "Received incremental during snapshot reassembly — discarding "
                  "snapshot buffer\n";
     assembler_.clear();
     reassembly_state_ = ReassemblyState::None;
   }
 
-  if (!is_incremental && reassembly_state_ == ReassemblyState::Incremental) {
+  if (!is_incremental && reassembly_state_ == ReassemblyState::Incremental)
+      [[unlikely]] {
     std::cerr << "Received snapshot during incremental reassembly — discarding "
                  "incremental buffer\n";
     assembler_.clear();
@@ -64,7 +66,7 @@ bool SimbaParser::buffer_fragment(uint16_t msg_flags, const uint8_t *payload,
   const bool is_end = (msg_flags & 0x04) != 0;
 
   if (is_incremental) {
-    if (payload_len < sizeof(IncrementalPacketHeader)) {
+    if (payload_len < sizeof(IncrementalPacketHeader)) [[unlikely]] {
       std::cerr << "Packet too short for IncrementalPacketHeader\n";
       assembler_.clear();
       return false;
@@ -77,7 +79,8 @@ bool SimbaParser::buffer_fragment(uint16_t msg_flags, const uint8_t *payload,
     reassembly_state_ =
         is_last ? ReassemblyState::None : ReassemblyState::Incremental;
   } else {
-    if (!is_start && reassembly_state_ != ReassemblyState::Snapshot) {
+    if (!is_start && reassembly_state_ != ReassemblyState::Snapshot)
+        [[unlikely]] {
       std::cerr << "Orphan snapshot fragment (no StartOfSnapshot)\n";
       assembler_.clear();
       return false;
@@ -106,7 +109,7 @@ void SimbaParser::process_complete_message(bool is_incremental) {
   size_t remaining = simba_payload.size();
 
   if (!is_incremental) {
-    if (remaining < sizeof(SBEHeader)) {
+    if (remaining < sizeof(SBEHeader)) [[unlikely]] {
       std::cerr << "Truncated snapshot SBE header\n";
       return;
     }
@@ -115,7 +118,7 @@ void SimbaParser::process_complete_message(bool is_incremental) {
     ptr += sizeof(SBEHeader);
     remaining -= sizeof(SBEHeader);
 
-    if (remaining < sbe.block_length) {
+    if (remaining < sbe.block_length) [[unlikely]] {
       std::cerr << "Truncated snapshot body\n";
       return;
     }
@@ -131,7 +134,7 @@ void SimbaParser::process_complete_message(bool is_incremental) {
     ptr += sizeof(SBEHeader);
     remaining -= sizeof(SBEHeader);
 
-    if (sbe.block_length == 0 || remaining < sbe.block_length) {
+    if (sbe.block_length == 0 || remaining < sbe.block_length) [[unlikely]] {
       std::cerr << "Truncated incremental message\n";
       return;
     }

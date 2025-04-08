@@ -57,7 +57,7 @@ std::optional<SimbaPayloadView> extract_simba_payload(const uint8_t *data,
   const uint8_t *ip_start = data + sizeof(EthernetHeader);
   IPv4Header ip = read_struct<IPv4Header>(ip_start);
 
-  if ((ip.version_ihl >> 4) != 4 || ip.ihl() < 5) {
+  if ((ip.version_ihl >> 4) != 4 || ip.ihl() < 5) [[unlikely]] {
     std::cerr << "Invalid IPv4 header\n";
     return std::nullopt;
   }
@@ -65,7 +65,7 @@ std::optional<SimbaPayloadView> extract_simba_payload(const uint8_t *data,
   size_t ip_len = ip.header_size();
   size_t total_offset = sizeof(EthernetHeader) + ip_len + 8; // 8 for UDP
 
-  if (total_offset >= len) {
+  if (total_offset >= len) [[unlikely]] {
     std::cerr << "Header lengths exceed packet size\n";
     return std::nullopt;
   }

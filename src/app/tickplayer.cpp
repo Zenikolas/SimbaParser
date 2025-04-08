@@ -59,22 +59,19 @@ int main(int argc, char *argv[]) {
   };
 
   simba::SimbaParser parser(processing_cb);
-  size_t packet_count = 0;
 
   while (true) {
     simba::PcapPacketHeader header;
     std::vector<char> msg;
-    if (!reader.read_next_packet(header, msg)) {
+    if (!reader.read_next_packet(header, msg)) [[unlikely]] {
       std::cout << "Reached end of file, exiting\n";
       break;
     }
 
-    std::cerr << "=== Packet #" << packet_count++ << " ===\n";
-
     auto payload = simba::extract_simba_payload(
         reinterpret_cast<const uint8_t *>(msg.data()), msg.size());
 
-    if (!payload || !payload->valid()) {
+    if (!payload || !payload->valid()) [[unlikely]] {
       std::cerr << "Invalid SIMBA payload in packet, skipping\n";
       continue;
     }

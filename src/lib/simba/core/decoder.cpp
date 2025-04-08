@@ -12,21 +12,21 @@ std::optional<ParsedMessage>
 decode_message(uint16_t template_id, const uint8_t *payload, size_t len) {
   switch (static_cast<MessageTemplate>(template_id)) {
   case MessageTemplate::OrderUpdate:
-    if (len < sizeof(OrderUpdate)) {
+    if (len < sizeof(OrderUpdate)) [[unlikely]] {
       std::cerr << "Incomplete OrderUpdate\n";
       return std::nullopt;
     }
     return ParsedMessage{read_struct<OrderUpdate>(payload)};
 
   case MessageTemplate::OrderExecution:
-    if (len < sizeof(OrderExecution)) {
+    if (len < sizeof(OrderExecution)) [[unlikely]] {
       std::cerr << "Incomplete OrderExecution\n";
       return std::nullopt;
     }
     return ParsedMessage{read_struct<OrderExecution>(payload)};
 
   case MessageTemplate::OrderBookSnapshot: {
-    if (len < sizeof(OrderBookSnapshotHeader)) {
+    if (len < sizeof(OrderBookSnapshotHeader)) [[unlikely]] {
       std::cerr << "Incomplete OrderBookSnapshot header\n";
       return std::nullopt;
     }
