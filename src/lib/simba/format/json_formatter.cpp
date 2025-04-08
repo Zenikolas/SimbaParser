@@ -3,6 +3,16 @@
 #include <sstream>
 
 namespace simba {
+std::string JsonFormatter::format(const SBEHeader &msg) {
+  std::ostringstream out;
+  out << "{";
+  out << "\"blockLength\":" << msg.block_length << ",";
+  out << "\"templateID\":" << msg.template_id << ",";
+  out << "\"schemaID\":" << msg.schema_id << ",";
+  out << "\"version\":" << msg.version;
+  out << "}";
+  return out.str();
+}
 
 std::string JsonFormatter::format(const OrderUpdate &msg) {
   std::ostringstream oss;

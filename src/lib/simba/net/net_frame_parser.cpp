@@ -1,13 +1,20 @@
 #include "simba/net/net_frame_parser.h"
 
-#include "simba/core/read_struct.h"
-
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <netinet/in.h>
 
 namespace simba {
 namespace {
+
+template <typename T> T read_struct(const uint8_t *data) {
+  static_assert(std::is_trivially_copyable_v<T>,
+                "read_struct requires trivially copyable type");
+  T out;
+  std::memcpy(&out, data, sizeof(T));
+  return out;
+}
 
 #pragma pack(push, 1)
 struct EthernetHeader {

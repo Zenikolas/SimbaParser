@@ -10,6 +10,7 @@ namespace simba {
 
 class JsonFormatter {
 public:
+  static std::string format(const SBEHeader &msg);
   static std::string format(const OrderUpdate &msg);
   static std::string format(const OrderExecution &msg);
   static std::string format(const OrderBookSnapshot &msg);

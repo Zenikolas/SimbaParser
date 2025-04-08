@@ -14,6 +14,6 @@ tickplaye is the application using SIMBA parser which processes raw binary UDP p
 ## Further improvements
 
 - Add parsing support for more SIMBA messages
-- Add app listeing on the socket to capture mesages from wire
+- Add app listening on the socket to capture mesages from wire
 - Add proper logging framework
 - Improve test code coverage

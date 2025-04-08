@@ -1,12 +1,21 @@
 #include "simba/core/simba_parser.h"
-
 #include "simba/core/decoder.h"
 #include "simba/core/market_data.h"
 #include "simba/core/read_struct.h"
 
-#include "iostream"
+#include <iostream>
+#include <utility>
 
 namespace simba {
+namespace {
+template <typename F> struct ScopeGuard {
+  F f;
+  ScopeGuard(F func) : f(std::move(func)) {}
+  ~ScopeGuard() { f(); }
+};
+} // namespace
+
+SimbaParser::SimbaParser(Callback cb) : callback_(std::move(cb)) {}
 
 void SimbaParser::feed(const uint8_t *data, size_t len) {
   if (len < sizeof(MarketDataPacketHeader)) {
@@ -15,64 +24,99 @@ void SimbaParser::feed(const uint8_t *data, size_t len) {
   }
 
   const auto header = read_struct<MarketDataPacketHeader>(data);
-
-  const bool is_last_fragment = (header.msg_flags & 0x01) != 0;
-  const bool is_start_of_snapshot = (header.msg_flags & 0x02) != 0;
-  const bool is_end_of_snapshot = (header.msg_flags & 0x04) != 0;
-  const bool is_incremental = (header.msg_flags & 0x08) != 0;
+  const uint16_t msg_flags = header.msg_flags;
 
   const uint8_t *payload = data + sizeof(MarketDataPacketHeader);
   size_t payload_len = len - sizeof(MarketDataPacketHeader);
 
-  bool complete = false;
+  const bool is_incremental = (msg_flags & 0x08) != 0;
+
+  handle_stream_transition(is_incremental);
+
+  if (!buffer_fragment(msg_flags, payload, payload_len)) {
+    return;
+  }
+
+  process_complete_message(is_incremental);
+}
+
+void SimbaParser::handle_stream_transition(bool is_incremental) {
+  if (is_incremental && reassembly_state_ == ReassemblyState::Snapshot) {
+    std::cerr << "Received incremental during snapshot reassembly — discarding "
+                 "snapshot buffer\n";
+    assembler_.clear();
+    reassembly_state_ = ReassemblyState::None;
+  }
+
+  if (!is_incremental && reassembly_state_ == ReassemblyState::Incremental) {
+    std::cerr << "Received snapshot during incremental reassembly — discarding "
+                 "incremental buffer\n";
+    assembler_.clear();
+    reassembly_state_ = ReassemblyState::None;
+  }
+}
+
+bool SimbaParser::buffer_fragment(uint16_t msg_flags, const uint8_t *payload,
+                                  size_t payload_len) {
+  const bool is_incremental = (msg_flags & 0x08) != 0;
+  const bool is_last = (msg_flags & 0x01) != 0;
+  const bool is_start = (msg_flags & 0x02) != 0;
+  const bool is_end = (msg_flags & 0x04) != 0;
 
   if (is_incremental) {
     if (payload_len < sizeof(IncrementalPacketHeader)) {
       std::cerr << "Packet too short for IncrementalPacketHeader\n";
-      return;
+      assembler_.clear();
+      return false;
     }
 
     payload += sizeof(IncrementalPacketHeader);
     payload_len -= sizeof(IncrementalPacketHeader);
 
     assembler_.feed(payload, payload_len);
-
-    complete = is_last_fragment;
+    reassembly_state_ =
+        is_last ? ReassemblyState::None : ReassemblyState::Incremental;
   } else {
-    if (is_start_of_snapshot) {
+    if (!is_start && reassembly_state_ != ReassemblyState::Snapshot) {
+      std::cerr << "Orphan snapshot fragment (no StartOfSnapshot)\n";
       assembler_.clear();
+      return false;
+    }
+
+    if (is_start) {
+      assembler_.clear();
+      reassembly_state_ = ReassemblyState::Snapshot;
     }
 
     assembler_.feed(payload, payload_len);
 
-    if (is_end_of_snapshot) {
-      complete = true;
+    if (is_end) {
+      reassembly_state_ = ReassemblyState::None;
     }
   }
 
-  if (!complete) {
-    return;
-  }
+  return reassembly_state_ == ReassemblyState::None;
+}
 
+void SimbaParser::process_complete_message(bool is_incremental) {
   auto simba_payload = assembler_.get_payload();
+  auto clear_on_exit = ScopeGuard([this] { assembler_.clear(); });
+
   const uint8_t *ptr = simba_payload.data();
   size_t remaining = simba_payload.size();
 
   if (!is_incremental) {
-    // Snapshot: only one message per packet
     if (remaining < sizeof(SBEHeader)) {
       std::cerr << "Truncated snapshot SBE header\n";
       return;
     }
 
     const auto sbe = read_struct<SBEHeader>(ptr);
-    remaining -= sizeof(SBEHeader);
     ptr += sizeof(SBEHeader);
+    remaining -= sizeof(SBEHeader);
 
     if (remaining < sbe.block_length) {
-      std::cerr << "Truncated snapshot body, remaining= " << remaining
-                << " sizeof(SBEHeader)=" << sizeof(SBEHeader)
-                << " sbe.block_length=" << sbe.block_length << "\n";
+      std::cerr << "Truncated snapshot body\n";
       return;
     }
 
@@ -82,7 +126,6 @@ void SimbaParser::feed(const uint8_t *data, size_t len) {
     return;
   }
 
-  // Incremental: multiple messages
   while (remaining >= sizeof(SBEHeader)) {
     const auto sbe = read_struct<SBEHeader>(ptr);
     ptr += sizeof(SBEHeader);

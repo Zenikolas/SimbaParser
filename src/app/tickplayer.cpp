@@ -59,6 +59,7 @@ int main(int argc, char *argv[]) {
   };
 
   simba::SimbaParser parser(processing_cb);
+  size_t packet_count = 0;
 
   while (true) {
     simba::PcapPacketHeader header;
@@ -67,6 +68,8 @@ int main(int argc, char *argv[]) {
       std::cout << "Reached end of file, exiting\n";
       break;
     }
+
+    std::cerr << "=== Packet #" << packet_count++ << " ===\n";
 
     auto payload = simba::extract_simba_payload(
         reinterpret_cast<const uint8_t *>(msg.data()), msg.size());
