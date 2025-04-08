@@ -1,19 +1,44 @@
 # SimbaParser
 
-**SimbaParser** is a C++20-based parser library for the MOEX SIMBA SPECTRA market data protocol. 
-tickplaye is the application using SIMBA parser which processes raw binary UDP payloads extracted from `.pcap` files and outputs structured newline-delimited JSON.
+**SimbaParser** is a modern C++20 parser for the MOEX SPECTRA SIMBA market data protocol.
+
+It provides a fast, binary-safe parser for SIMBA messages, supporting both incremental and snapshot streams.  
+The library is suitable for use in trading tools, data ingestion pipelines, and market data analysis applications.
+
+A command-line tool, `tickplayer`, is included as a reference implementation and utility.  
+It uses the SimbaParser library to read and decode `.pcap` files containing captured SIMBA market data, outputting newline-delimited JSON messages.
+
+
+---
 
 ## Features
 
-- Binary-safe decoding of SIMBA protocol messages
-- Full support for **incremental** and **snapshot** message types:
-  - `OrderUpdate` (msg ID 15)
-  - `OrderExecution` (msg ID 16)
-  - `OrderBookSnapshot` (msg ID 17), including repeating groups
+- Binary-safe decoding of SIMBA messages
+- Handles fragmentation & reassembly:
+  - Snapshot messages with start/mid/end fragments
+  - Incremental messages with LastFragment logic
+- Supports message types:
+  - `OrderUpdate` (template ID 15)
+  - `OrderExecution` (template ID 16)
+  - `OrderBookSnapshot` (template ID 17) with repeating groups
+- Outputs compact JSON per message
+- Extensible, modular architecture
 
-## Further improvements
+---
 
-- Add parsing support for more SIMBA messages
-- Add app listening on the socket to capture mesages from wire
-- Add proper logging framework
-- Improve test code coverage
+## Builing environment
+
+- C++20-compatible compiler (GCC ≥ 10, Clang ≥ 12)
+- CMake ≥ 3.20
+- [Ninja](https://ninja-build.org/) build system
+
+---
+
+## Build Instructions
+
+```bash
+git clone https://github.com/Zenikolas/SimbaParser.git
+cd SimbaParser
+mkdir build && cd build
+cmake -G Ninja ..
+ninja
