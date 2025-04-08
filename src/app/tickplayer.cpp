@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
   }
 
   const auto &opts = *parsed;
-  std::cout << "Reading PCAP from: " << opts.pcap_file << "\n";
+  std::cerr << "Reading PCAP from: " << opts.pcap_file << "\n";
 
   simba::Reader reader(opts.pcap_file);
 

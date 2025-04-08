@@ -18,7 +18,7 @@ bool Reader::read_global_header() {
     return false;
   }
 
-  std::cout << "PCAP version " << global_header.version_major << "."
+  std::cerr << "PCAP version " << global_header.version_major << "."
             << global_header.version_minor << "\n";
   return true;
 }
