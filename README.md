@@ -14,9 +14,6 @@ It uses the SimbaParser library to read and decode `.pcap` files containing capt
 ## Features
 
 - Binary-safe decoding of SIMBA messages
-- Handles fragmentation & reassembly:
-  - Snapshot messages with start/mid/end fragments
-  - Incremental messages with LastFragment logic
 - Supports message types:
   - `OrderUpdate` (template ID 15)
   - `OrderExecution` (template ID 16)

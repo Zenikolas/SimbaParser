@@ -12,6 +12,7 @@
 
 struct CmdOptions {
   std::string pcap_file;
+  std::string out_file = "output.json";
 };
 
 std::optional<CmdOptions> parse_args(int argc, char *argv[]) {
@@ -22,6 +23,8 @@ std::optional<CmdOptions> parse_args(int argc, char *argv[]) {
 
     if ((arg == "--file" || arg == "-f") && i + 1 < argc) {
       options.pcap_file = argv[++i];
+    } else if ((arg == "--output" || arg == "-o") && i + 1 < argc) {
+      options.out_file = argv[++i];
     } else if (arg == "--help" || arg == "-h") {
       std::cout << "Usage: tickplayer --file <capture.pcap>\n";
       return std::nullopt;
@@ -54,8 +57,12 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  auto processing_cb = [](const simba::ParsedMessage &msg) -> void {
-    std::cout << simba::JsonFormatter::format(msg) << "\n";
+  std::ofstream ofs(opts.out_file);
+
+  ofs << "[\n";
+
+  auto processing_cb = [&ofs](const simba::ParsedMessage &msg) -> void {
+    ofs << simba::JsonFormatter::format(msg) << ",\n";
   };
 
   simba::SimbaParser parser(processing_cb);
@@ -78,6 +85,8 @@ int main(int argc, char *argv[]) {
 
     parser.feed(payload->data, payload->length);
   }
+
+  ofs << "]\n";
 
   return 0;
 }
