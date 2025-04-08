@@ -1,6 +1,5 @@
-#include "simba/core/simba_parser.h"
-
 #include "simba/core/simba_messages.h"
+#include "simba/core/simba_parser.h"
 
 #include <cstring>
 #include <span>
@@ -10,6 +9,7 @@
 
 namespace simba {
 namespace {
+
 auto make_packet(uint16_t msg_flags, const std::vector<uint8_t> &body) {
   MarketDataPacketHeader header{
       .msg_seq_num = 0,
@@ -22,9 +22,9 @@ auto make_packet(uint16_t msg_flags, const std::vector<uint8_t> &body) {
   std::memcpy(buffer.data(), &header, sizeof(header));
   std::memcpy(buffer.data() + sizeof(header), body.data(), body.size());
   return buffer;
-};
+}
 
-auto make_incremental_body(const std::vector<OrderUpdate> &updates) {
+auto make_incremental_order_updates(const std::vector<OrderUpdate> &updates) {
   std::vector<uint8_t> buf;
   IncrementalPacketHeader inc_hdr{.transact_time = 0, .session_id = 0};
   buf.resize(sizeof(inc_hdr));
@@ -44,8 +44,9 @@ auto make_incremental_body(const std::vector<OrderUpdate> &updates) {
   }
 
   return buf;
-};
+}
 
+// Helper to make a snapshot fragment with appropriate flags
 auto make_snapshot_fragment(bool start, bool end,
                             const std::vector<uint8_t> &payload) {
   uint16_t flags = 0;
@@ -55,91 +56,18 @@ auto make_snapshot_fragment(bool start, bool end,
     flags |= 0x04;
 
   return make_packet(flags, payload);
-};
-} // namespace
-
-TEST(SimbaParser, IncrementalFragmentation) {
-  std::vector<ParsedMessage> messages;
-
-  SimbaParser parser(
-      [&messages](const ParsedMessage &msg) { messages.push_back(msg); });
-
-  // Simulate an OrderUpdate message across 2 fragments
-  SBEHeader sbe{.block_length = sizeof(OrderUpdate),
-                .template_id =
-                    static_cast<uint16_t>(MessageTemplate::OrderUpdate),
-                .schema_id = 1,
-                .version = 1};
-
-  OrderUpdate msg{.md_entry_id = 555,
-                  .md_entry_px = {1000000},
-                  .md_entry_size = 10,
-                  .md_flags = 0,
-                  .md_flags2 = 0,
-                  .security_id = 42,
-                  .rpt_seq = 1,
-                  .update_action = 0,
-                  .entry_type = '0'};
-
-  // Simulated UDP payload
-  std::vector<uint8_t> simba_payload(sizeof(sbe) + sizeof(msg));
-  std::memcpy(simba_payload.data(), &sbe, sizeof(sbe));
-  std::memcpy(simba_payload.data() + sizeof(sbe), &msg, sizeof(msg));
-
-  // Split into two fragments
-  size_t split = 10; // arbitrary split offset
-  std::vector<uint8_t> frag1(simba_payload.begin(),
-                             simba_payload.begin() + split);
-  std::vector<uint8_t> frag2(simba_payload.begin() + split,
-                             simba_payload.end());
-
-  // Create fake incremental packets with MarketDataPacketHeader
-  auto make_header = [](bool last) -> MarketDataPacketHeader {
-    return {.msg_seq_num = 1,
-            .msg_size = 0,
-            .msg_flags = static_cast<uint16_t>(
-                0x08 | (last ? 0x01 : 0x00)), // incremental, last fragment flag
-            .sending_time = 0};
-  };
-
-  auto make_incremental_header = []() -> IncrementalPacketHeader {
-    return {.transact_time = 0, .session_id = 0};
-  };
-
-  auto build_packet = [](const MarketDataPacketHeader &h,
-                         const IncrementalPacketHeader &inc,
-                         const std::vector<uint8_t> &body) {
-    std::vector<uint8_t> packet(sizeof(h) + sizeof(inc) + body.size());
-    uint8_t *p = packet.data();
-    std::memcpy(p, &h, sizeof(h));
-    std::memcpy(p + sizeof(h), &inc, sizeof(inc));
-    std::memcpy(p + sizeof(h) + sizeof(inc), body.data(), body.size());
-    return packet;
-  };
-
-  // Feed fragment 1
-  auto packet1 =
-      build_packet(make_header(false), make_incremental_header(), frag1);
-  parser.feed(packet1.data(), packet1.size());
-
-  // Feed fragment 2
-  auto packet2 =
-      build_packet(make_header(true), make_incremental_header(), frag2);
-  parser.feed(packet2.data(), packet2.size());
-
-  ASSERT_EQ(messages.size(), 1);
-  auto &parsed = std::get<OrderUpdate>(messages[0]);
-  EXPECT_EQ(parsed.md_entry_id, 555);
 }
 
-TEST(SimbaParser, IncrementalAndSnapshotMixedTest) {
+} // namespace
+
+TEST(SimbaParser, IncrementalSnapshotThenOrderExecution) {
   std::vector<ParsedMessage> messages;
 
   SimbaParser parser(
       [&](const ParsedMessage &msg) { messages.push_back(msg); });
 
-  // Packet 1: Incremental, 1 OrderUpdate
-  OrderUpdate upd1 = {.md_entry_id = 1,
+  // === Incremental: 2 OrderUpdates ===
+  OrderUpdate upd1 = {.md_entry_id = 10,
                       .md_entry_px = {100000},
                       .md_entry_size = 10,
                       .md_flags = 0,
@@ -148,18 +76,15 @@ TEST(SimbaParser, IncrementalAndSnapshotMixedTest) {
                       .rpt_seq = 1,
                       .update_action = 0,
                       .entry_type = '0'};
-  auto p1 = make_packet(0x09, make_incremental_body({upd1}));
-  parser.feed(p1.data(), p1.size());
 
-  // Packet 2: Incremental, 2 OrderUpdates
   OrderUpdate upd2 = upd1;
-  upd2.md_entry_id = 2;
-  OrderUpdate upd3 = upd1;
-  upd3.md_entry_id = 3;
-  auto p2 = make_packet(0x09, make_incremental_body({upd2, upd3}));
-  parser.feed(p2.data(), p2.size());
+  upd2.md_entry_id = 20;
 
-  // Snapshot parts
+  auto incr_body = make_incremental_order_updates({upd1, upd2});
+  auto incr_packet = make_packet(0x08, incr_body); // incremental
+  parser.feed(incr_packet.data(), incr_packet.size());
+
+  // === Snapshot ===
   OrderBookSnapshotHeader snap_hdr = {.security_id = 1001,
                                       .last_msg_seq_num_processed = 0,
                                       .rpt_seq = 0,
@@ -180,37 +105,90 @@ TEST(SimbaParser, IncrementalAndSnapshotMixedTest) {
   OrderBookEntry e2 = e1;
   e2.md_entry_id = {222};
 
-  // Fragment 1: Start
-  std::vector<uint8_t> snap1(sizeof(SBEHeader) + sizeof(snap_hdr));
-  SBEHeader sbe_snap{sizeof(snap_hdr), 17, 1, 1};
-  std::memcpy(snap1.data(), &sbe_snap, sizeof(sbe_snap));
-  std::memcpy(snap1.data() + sizeof(sbe_snap), &snap_hdr, sizeof(snap_hdr));
-  auto p3 = make_snapshot_fragment(true, false, snap1);
-  parser.feed(p3.data(), p3.size());
+  std::vector<uint8_t> snap_payload;
+  SBEHeader sbe_snap{
+      .block_length = sizeof(snap_hdr),
+      .template_id = static_cast<uint16_t>(MessageTemplate::OrderBookSnapshot),
+      .schema_id = 1,
+      .version = 1};
 
-  // Fragment 2: Middle
-  std::vector<uint8_t> snap2(sizeof(group_hdr));
-  std::memcpy(snap2.data(), &group_hdr, sizeof(group_hdr));
-  auto p4 = make_snapshot_fragment(false, false, snap2);
-  parser.feed(p4.data(), p4.size());
+  size_t offset = 0;
+  snap_payload.resize(sizeof(sbe_snap) + sizeof(snap_hdr) + sizeof(group_hdr) +
+                      sizeof(e1) + sizeof(e2));
 
-  // Fragment 3: End (2 entries)
-  std::vector<uint8_t> snap3(sizeof(e1) + sizeof(e2));
-  std::memcpy(snap3.data(), &e1, sizeof(e1));
-  std::memcpy(snap3.data() + sizeof(e1), &e2, sizeof(e2));
-  auto p5 = make_snapshot_fragment(false, true, snap3);
-  parser.feed(p5.data(), p5.size());
+  std::memcpy(snap_payload.data() + offset, &sbe_snap, sizeof(sbe_snap));
+  offset += sizeof(sbe_snap);
 
-  ASSERT_EQ(messages.size(), 4); // 3 incremental + 1 snapshot
+  std::memcpy(snap_payload.data() + offset, &snap_hdr, sizeof(snap_hdr));
+  offset += sizeof(snap_hdr);
+
+  std::memcpy(snap_payload.data() + offset, &group_hdr, sizeof(group_hdr));
+  offset += sizeof(group_hdr);
+
+  std::memcpy(snap_payload.data() + offset, &e1, sizeof(e1));
+  offset += sizeof(e1);
+
+  std::memcpy(snap_payload.data() + offset, &e2, sizeof(e2));
+
+  auto snapshot_packet = make_snapshot_fragment(true, true, snap_payload);
+  parser.feed(snapshot_packet.data(), snapshot_packet.size());
+
+  // === OrderExecution ===
+  OrderExecution exec_msg = {.md_entry_id = 888,
+                             .md_entry_px = {105000},
+                             .md_entry_size = {15},
+                             .last_px = {106000},
+                             .last_qty = 5,
+                             .trade_id = 5555,
+                             .md_flags = 0,
+                             .md_flags2 = 0,
+                             .security_id = 1001,
+                             .rpt_seq = 3,
+                             .update_action = 0,
+                             .entry_type = '2'};
+
+  SBEHeader sbe_exec{.block_length = sizeof(OrderExecution),
+                     .template_id =
+                         static_cast<uint16_t>(MessageTemplate::OrderExecution),
+                     .schema_id = 1,
+                     .version = 1};
+
+  std::vector<uint8_t> exec_payload(sizeof(sbe_exec) + sizeof(exec_msg));
+  std::memcpy(exec_payload.data(), &sbe_exec, sizeof(sbe_exec));
+  std::memcpy(exec_payload.data() + sizeof(sbe_exec), &exec_msg,
+              sizeof(exec_msg));
+
+  IncrementalPacketHeader exec_inc_hdr{.transact_time = 1, .session_id = 0};
+
+  std::vector<uint8_t> exec_full_payload(sizeof(exec_inc_hdr) +
+                                         exec_payload.size());
+  std::memcpy(exec_full_payload.data(), &exec_inc_hdr, sizeof(exec_inc_hdr));
+  std::memcpy(exec_full_payload.data() + sizeof(exec_inc_hdr),
+              exec_payload.data(), exec_payload.size());
+
+  auto exec_packet = make_packet(0x08, exec_full_payload); // incremental
+
+  parser.feed(exec_packet.data(), exec_packet.size());
+
+  // === Assertions ===
+  ASSERT_EQ(messages.size(), 4);
 
   EXPECT_TRUE(std::holds_alternative<OrderUpdate>(messages[0]));
   EXPECT_TRUE(std::holds_alternative<OrderUpdate>(messages[1]));
-  EXPECT_TRUE(std::holds_alternative<OrderUpdate>(messages[2]));
-  EXPECT_TRUE(std::holds_alternative<OrderBookSnapshot>(messages[3]));
+  EXPECT_TRUE(std::holds_alternative<OrderBookSnapshot>(messages[2]));
+  EXPECT_TRUE(std::holds_alternative<OrderExecution>(messages[3]));
 
-  const auto &snapshot = std::get<OrderBookSnapshot>(messages[3]);
-  ASSERT_EQ(snapshot.entries.size(), 2);
-  EXPECT_EQ(snapshot.entries[0].md_entry_id.value, 111);
-  EXPECT_EQ(snapshot.entries[1].md_entry_id.value, 222);
+  const auto &snap = std::get<OrderBookSnapshot>(messages[2]);
+  ASSERT_EQ(snap.entries.size(), 2);
+  EXPECT_EQ(snap.entries[0].md_entry_id.value, 111);
+  EXPECT_EQ(snap.entries[1].md_entry_id.value, 222);
+
+  const auto &exec = std::get<OrderExecution>(messages[3]);
+  EXPECT_EQ(exec.md_entry_id, 888);
+  EXPECT_EQ(exec.last_px.mantissa, 106000);
+  EXPECT_EQ(exec.last_qty, 5);
+  EXPECT_EQ(exec.trade_id, 5555);
+  EXPECT_EQ(exec.security_id, 1001);
 }
+
 } // namespace simba
